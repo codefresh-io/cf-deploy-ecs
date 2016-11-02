@@ -3,7 +3,7 @@ version: '1.0'
 steps:
   build-step:
     type: build
-    image-name: codefresh/cf-deply-ecs
+    image-name: codefresh/cf-deploy-ecs
 
   push to registry:
     type: push
