@@ -8,4 +8,5 @@ RUN pip install boto3 && echo "/cfecs" > /usr/local/lib/python2.7/site-packages/
 COPY cfecs-update /
 COPY cfecs/ cfecs/
 
-ENTRYPOINT ["/cfecs-update"]
+#ENTRYPOINT ["/cfecs-update"]
+CMD ["bash"]
