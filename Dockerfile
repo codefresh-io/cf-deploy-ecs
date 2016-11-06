@@ -5,7 +5,7 @@ ENV SHELL /bin/bash
 
 RUN pip install boto3 && echo "/cfecs" > /usr/local/lib/python2.7/site-packages/cf.pth
 
-COPY cfecs-update /
+COPY cfecs-update /usr/local/bin/
 COPY cfecs/ cfecs/
 
 #ENTRYPOINT ["/cfecs-update"]

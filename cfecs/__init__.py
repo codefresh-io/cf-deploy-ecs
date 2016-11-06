@@ -1,42 +1,145 @@
-import sys, json, pprint, boto3
+import logging, pprint, boto3, time, copy
 from datetime import datetime
+
+C_SUCCESS = 'SUCCESS'
+C_FAIL = 'FAIL'
+C_TIMEOUT = 'TIMEOUT'
+C_SUBMITTED = 'SUBMITTED'
 
 def now():
     return datetime.now().strftime('%d-%b-%Y %H:%M:%S.%f')[:-3]
 
-def log(message):
-    print('{}: {}'.format(now(), message))
+LOGGER_NAME = 'cfecs_logger'
+def init_log(level=logging.INFO, log_stdout=True):
+    log = logging.getLogger(LOGGER_NAME)
+    if not [sh for sh in log.handlers if sh.__class__.__name__ == 'StreamHandler'] and log_stdout:
+        log.addHandler(logging.StreamHandler())
+
+    log.setLevel(level)
+    for h in log.handlers:
+        h.setLevel(level)
+    return log
+log = init_log()
+
+def get_ecs(**kwargs):
+    return boto3.client('ecs', **kwargs)
+
+def _ecs_arn_dsp(arn):
+    """
+    :param arn:
+    :return: display name of ecs
+    """
+    try:
+        return arn.split('/')[1]
+    except Exception:
+        return arn
+
+def _ecs_service_dsp(service):
+    """
+    copies service dict for display
+    :param service:
+    :return:
+    """
+    _service = copy.deepcopy(service)
+    if "events" in _service:
+        del _service["events"]
+    return _service
 
 
-def update_service(region, cluster_name, service_name):
+WAIT_SLEEP=10
+DEPLOY_TIMEOUT=900
 
-    log("Entering cfecs.update_service: region = {} , cluster = {} , service = {}".format(region, cluster_name, service_name))
-    ecs = boto3.client('ecs', region_name = region)
+def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
+    """
+    Waiting for ecs deployment (update service) to complete
+    :param cluster_name:
+    :param service_name:
+    :param ecs:
+    :param kwargs:
+
+    :return:
+    """
+    log.info("\n---------------------\nWaiting For Deployment: cluster = {} , service = {} ...".format(cluster_name, service_name))
+    if not ecs:
+        ecs = get_ecs(region_name = kwargs.get("region_name"))
+
+    d_start = datetime.now()
+    deploy_timeout = kwargs.get('deploy_timeout') or DEPLOY_TIMEOUT
+
+    log.info("Wait until runningCount will be equal to desiredCount for PRIMARY service task ... ")
+    while True:
+        time.sleep(WAIT_SLEEP)
+        log.info("\n........... {}".format(now()))
+
+        service = ecs.describe_services(cluster=cluster_name, services=[service_name])['services'][0]
+        deployments = service["deployments"]
+        for d in deployments:
+            log.info( "    {}  task {} - runningCount = {} , desiredCount = {},  pendingCount = {}".
+                      format(d["status"], _ecs_arn_dsp(d["taskDefinition"]), d.get("runningCount"), d.get("desiredCount"), d.get("pendingCount")))
+
+            if d['status'] == 'PRIMARY' and d["desiredCount"] == d["runningCount"]:
+                log.info("Deployment completed Successfully!!!")
+                return {"status": C_SUCCESS, "service": _ecs_service_dsp(service)}
+        if (datetime.now() - d_start).total_seconds() > deploy_timeout:
+            log.error("ERROR: Deploy Timeout {}s reached ".format(deploy_timeout))
+            return {"status": C_TIMEOUT, "service": _ecs_service_dsp(service)}
+
+
+
+def update_service(cluster_name, service_name, ecs=None, **kwargs):
+
+    log.info("\n---------------------\nUpdating Service: cluster = {} , service = {}\n"
+             "{}".format(cluster_name, service_name, pprint.pformat(kwargs, indent=4)))
+    if not ecs:
+        ecs = get_ecs(region_name = kwargs.get("region_name"))
+
     services = ecs.describe_services(cluster=cluster_name, services=[service_name])
+    if not services or not services.get('services'):
+        raise Exception("ERROR: Cannot find service {} in cluster {}".format(service_name, cluster_name))
 
-    service_def = services['services'][0]
-    task_definition_name = service_def["taskDefinition"]
-    log('task_definition_name = {}'.format(task_definition_name))
+    service = services['services'][0]
+    current_task_arn = service["taskDefinition"]
+    log.info('current task arn = {}'.format(current_task_arn))
 
-    task_definition_desc = ecs.describe_task_definition(taskDefinition = task_definition_name)
+    task_definition_desc = ecs.describe_task_definition(taskDefinition = current_task_arn)
     task_definition = task_definition_desc['taskDefinition']
     keys_to_remove = ["status", "taskDefinitionArn", "requiresAttributes", "revision"]
     for k in keys_to_remove:
         task_definition.pop(k, None)
 
+    image_name = kwargs.get('image_name')
+    new_image_tag = kwargs.get('image_tag')
+    new_image_name_tag = '{}:{}'.format(image_name, new_image_tag)
+    if image_name and new_image_tag:
+        _found = False
+        for c in task_definition['containerDefinitions']:
+            _image_name_split = c.get('image').split(':')
+            if _image_name_split[0] == image_name:
+                log.info("Set new image: {} ( was {} )".format(new_image_name_tag, c.get('image')))
+                c['image'] = new_image_name_tag
+                break
+
     register_task_resp = ecs.register_task_definition(**task_definition)
     new_task_arn = register_task_resp['taskDefinition']['taskDefinitionArn']
 
-    log("new task arn: {}".format(new_task_arn))
+    log.info("new task arn: {}".format(new_task_arn))
 
     update_service_params = {
         'cluster': cluster_name,
         'service': service_name,
-        'desiredCount': service_def['desiredCount'],
+        'desiredCount': service['desiredCount'],
         'taskDefinition': new_task_arn,
-        'deploymentConfiguration': service_def['deploymentConfiguration']
+        'deploymentConfiguration': service['deploymentConfiguration']
     }
-    log("Updating Service: {}".format(pprint.pformat(update_service_params)))
+    log.info("Updating Service: {}".format(pprint.pformat(update_service_params)))
     response = ecs.update_service(**update_service_params)
-    return response
+    if not response or not response.get('service') or not response.get('ResponseMetadata') or response.get('ResponseMetadata').get('HTTPStatusCode') > 299:
+        raise Exception("ERROR: Invalid response from aws: {}".format(response))
+
+    wait = kwargs.get('wait')
+    if wait:
+        log.info("Waiting for deployment to complete ...")
+        return wait_for_deployment(cluster_name, service_name, ecs, **kwargs)
+    else:
+        return {"status": C_SUBMITTED, "service": _ecs_service_dsp(response['service'])}
 
