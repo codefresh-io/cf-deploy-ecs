@@ -33,7 +33,7 @@ steps:
       - name: "Execute for 'master' branch"
         condition: "'${{CF_BRANCH}}' == 'master'"
 ```
-
+``
 ### cfecs-update -h
 usage: cfecs-update [-h] [-i IMAGE_NAME] [-t IMAGE_TAG] [--wait | --no-wait]
                     [--timeout TIMEOUT] [--debug]
@@ -57,4 +57,4 @@ optional arguments:
   --timeout TIMEOUT     deployment wait timeout
   --debug               show debug messages
 
-### Running in codefresh.io yaml
+``
