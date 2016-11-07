@@ -1,4 +1,4 @@
-import logging, pprint, boto3, time, copy
+import logging, pprint, boto3, time, copy, pytz
 from datetime import datetime
 
 C_SUCCESS = 'SUCCESS'
@@ -48,6 +48,7 @@ def _ecs_service_dsp(service):
 
 WAIT_SLEEP=10
 DEPLOY_TIMEOUT=900
+MAX_FAILED_TASKS=4
 
 def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
     """
@@ -72,21 +73,32 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
         log.info("\n........... {}".format(now()))
 
         service = ecs.describe_services(cluster=cluster_name, services=[service_name])['services'][0]
+        task_definition_arn = service["taskDefinition"]
         deployments = service["deployments"]
+        deployment_created_at = None
         for d in deployments:
             log.info( "    {}  task {} - runningCount = {} , desiredCount = {},  pendingCount = {}".
                       format(d["status"], _ecs_arn_dsp(d["taskDefinition"]), d.get("runningCount"), d.get("desiredCount"), d.get("pendingCount")))
+
+            if d['status'] == 'PRIMARY':
+                deployment_created_at = d['createdAt']
 
             if d['status'] == 'PRIMARY' and d["desiredCount"] == d["runningCount"]:
                 log.info("Deployment completed Successfully!!!")
                 return {"status": C_SUCCESS, "service": _ecs_service_dsp(service)}
 
-
-
         if (datetime.now() - d_start).total_seconds() > deploy_timeout:
             log.error("ERROR: Deploy Timeout {}s reached ".format(deploy_timeout))
             return {"status": C_TIMEOUT, "service": _ecs_service_dsp(service)}
 
+        # Check for failed tasks every 30s
+        if (datetime.now() - d_start).total_seconds() > 30:
+            failed_tasks = get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs,
+                                            max_results=MAX_FAILED_TASKS, created_after=deployment_created_at)
+            if failed_tasks and len(failed_tasks) >= MAX_FAILED_TASKS:
+                log.error("ERROR:  {} or more ecs tasks failed".format(MAX_FAILED_TASKS))
+                log.error(pprint.pformat(failed_tasks))
+                return {"status": C_FAIL, "failed_tasks": failed_tasks}
 
 def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, **kwargs):
     """
@@ -95,19 +107,20 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
     :param service_name:
     :param task_definition_arn:
     :param created_after:
-    :param max_failed:
+    :param max_results:
     :param next_token:
     :return:
     """
 
     region_name = kwargs.get("region_name")
-    created_after = kwargs.get('created_after') or datetime.utcfromtimestamp(1)
-    max_failed = kwargs.get('max_failed')
+    created_after = (kwargs.get('created_after') or datetime.fromtimestamp(1)).replace(tzinfo=pytz.utc)
+    max_results = kwargs.get('max_results')
     next_token = kwargs.get('next_token') or ""
     if not ecs:
         ecs = get_ecs(region_name = region_name)
 
-    task_list_resp = ecs.list_tasks(cluster=cluster_name, serviceName=service_name, desiredStatus='STOPPED', nextToken=next_token)
+    task_list_resp = ecs.list_tasks(cluster=cluster_name, serviceName=service_name, desiredStatus='STOPPED',
+                                    maxResults=min(max_results, 100), nextToken=next_token)
     next_token = task_list_resp.get('nextToken')
     task_arns_resp = task_list_resp.get("taskArns")
     if not task_arns_resp:
@@ -115,18 +128,11 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
 
     tasks_all_resp = ecs.describe_tasks(cluster=cluster_name, tasks=task_arns_resp)
     tasks_all = tasks_all_resp.get('tasks')
-    tasks = [t for t in tasks_all if t.get('taskDefinitionArn') == task_definition_arn and t.get('createdAt') > created_after]
-    if not tasks:
-        return []
-    elif not next_token or max_failed and len(tasks) >= max_failed:
+    tasks = [t for t in tasks_all if t.get('taskDefinitionArn') == task_definition_arn and t.get('createdAt').replace(tzinfo=pytz.utc) > created_after]
+    if not next_token or max_results and len(tasks) >= max_results:
         return tasks
     else:
-        return tasks + get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs, created_after=created_after, max_failed=max_failed, next_token=next_token)
-
-
-
-
-
+        return tasks + get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs, created_after=created_after, max_results=max_results, next_token=next_token)
 
 
 def update_service(cluster_name, service_name, ecs=None, **kwargs):
