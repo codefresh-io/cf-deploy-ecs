@@ -33,8 +33,9 @@ steps:
       - name: "Execute for 'master' branch"
         condition: "'${{CF_BRANCH}}' == 'master'"
 ```
-```
+
 ### cfecs-update -h
+```
 usage: cfecs-update [-h] [-i IMAGE_NAME] [-t IMAGE_TAG] [--wait | --no-wait]
                     [--timeout TIMEOUT] [--debug]
                     region_name cluster_name service_name
