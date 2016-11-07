@@ -80,9 +80,52 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
             if d['status'] == 'PRIMARY' and d["desiredCount"] == d["runningCount"]:
                 log.info("Deployment completed Successfully!!!")
                 return {"status": C_SUCCESS, "service": _ecs_service_dsp(service)}
+
+
+
         if (datetime.now() - d_start).total_seconds() > deploy_timeout:
             log.error("ERROR: Deploy Timeout {}s reached ".format(deploy_timeout))
             return {"status": C_TIMEOUT, "service": _ecs_service_dsp(service)}
+
+
+def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, **kwargs):
+    """
+
+    :param cluster_name:
+    :param service_name:
+    :param task_definition_arn:
+    :param created_after:
+    :param max_failed:
+    :param next_token:
+    :return:
+    """
+
+    region_name = kwargs.get("region_name")
+    created_after = kwargs.get('created_after') or datetime.utcfromtimestamp(1)
+    max_failed = kwargs.get('max_failed')
+    next_token = kwargs.get('next_token') or ""
+    if not ecs:
+        ecs = get_ecs(region_name = region_name)
+
+    task_list_resp = ecs.list_tasks(cluster=cluster_name, serviceName=service_name, desiredStatus='STOPPED', nextToken=next_token)
+    next_token = task_list_resp.get('nextToken')
+    task_arns_resp = task_list_resp.get("taskArns")
+    if not task_arns_resp:
+        return []
+
+    tasks_all_resp = ecs.describe_tasks(cluster=cluster_name, tasks=task_arns_resp)
+    tasks_all = tasks_all_resp.get('tasks')
+    tasks = [t for t in tasks_all if t.get('taskDefinitionArn') == task_definition_arn and t.get('createdAt') > created_after]
+    if not tasks:
+        return []
+    elif not next_token or max_failed and len(tasks) >= max_failed:
+        return tasks
+    else:
+        return tasks + get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs, created_after=created_after, max_failed=max_failed, next_token=next_token)
+
+
+
+
 
 
 
@@ -98,10 +141,10 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
         raise Exception("ERROR: Cannot find service {} in cluster {}".format(service_name, cluster_name))
 
     service = services['services'][0]
-    current_task_arn = service["taskDefinition"]
-    log.info('current task arn = {}'.format(current_task_arn))
+    current_task_def_arn = service["taskDefinition"]
+    log.info('current task definition arn = {}'.format(current_task_def_arn))
 
-    task_definition_desc = ecs.describe_task_definition(taskDefinition = current_task_arn)
+    task_definition_desc = ecs.describe_task_definition(taskDefinition = current_task_def_arn)
     task_definition = task_definition_desc['taskDefinition']
     keys_to_remove = ["status", "taskDefinitionArn", "requiresAttributes", "revision"]
     for k in keys_to_remove:
@@ -117,18 +160,21 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
             if _image_name_split[0] == image_name:
                 log.info("Set new image: {} ( was {} )".format(new_image_name_tag, c.get('image')))
                 c['image'] = new_image_name_tag
+                _found = True
                 break
+        if not _found:
+            raise Exception("ERROR: Cannot find image {} in service {} of cluster {}".format(image_name, service_name, cluster_name))
 
     register_task_resp = ecs.register_task_definition(**task_definition)
-    new_task_arn = register_task_resp['taskDefinition']['taskDefinitionArn']
+    new_task_def_arn = register_task_resp['taskDefinition']['taskDefinitionArn']
 
-    log.info("new task arn: {}".format(new_task_arn))
+    log.info("new task definition arn: {}".format(new_task_def_arn))
 
     update_service_params = {
         'cluster': cluster_name,
         'service': service_name,
         'desiredCount': service['desiredCount'],
-        'taskDefinition': new_task_arn,
+        'taskDefinition': new_task_def_arn,
         'deploymentConfiguration': service['deploymentConfiguration']
     }
     log.info("Updating Service: {}".format(pprint.pformat(update_service_params)))
