@@ -1,5 +1,15 @@
 
 # cf-ecs-deploy
+Deploys to existing Amazon ECS Service
+
+### Deployment Flow
+- get ECS service by providing aws region, ecs cluster and service names
+- create new revision from current task definition of the service. If --image-name and --image-tag are provided, replace the tag of the image
+- launche update-service with new task definition revision
+- wait for deployment to complete (by default, if running withou --no-wait)
+    * deployment is considered as completed successfully if runningCount == desiredCount for PRIMARY deployment - see `aws ecs describe-service`
+    * cfecs-update exits with timeout if after --timeout (default = 900s) runningCount != desiredCount script exits with timeout
+    * cfecs-update exits with error if 4 or more ecs tasks were stopped with error for the task definition being deployed
 
 ### Usage with docker
 
