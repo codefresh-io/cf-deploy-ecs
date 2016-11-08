@@ -125,7 +125,7 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
             return False
         if task.get('stoppedReason') and 'Scaling activity initiated by' not in task.get('stoppedReason'):
             return True
-        failed_containers = [t for t in task.get('containers') if t.get('reason') and 'error' in (t['reason']).lower]
+        failed_containers = [t for t in task.get('containers') if t.get('reason') and 'error' in (t['reason']).lower or t.get('exitCode') > 0]
         if failed_containers:
             return True
 
