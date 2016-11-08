@@ -9,7 +9,8 @@ Deploys to existing Amazon ECS Service
 - wait for deployment to complete (by default, if running withou --no-wait)
     * deployment is considered as completed successfully if runningCount == desiredCount for PRIMARY deployment - see `aws ecs describe-service`
     * cfecs-update exits with timeout if after --timeout (default = 900s) runningCount != desiredCount script exits with timeout
-    * cfecs-update exits with error if --max-failed (default = 4) or more ecs tasks were stopped with error for the task definition being deployed
+    * cfecs-update exits with error if --max-failed (default = 2) or more ecs tasks were stopped with error for the task definition being deployed.
+      ECS retries failed tasks continuously
 
 ### Usage with docker
 
@@ -64,7 +65,7 @@ optional arguments:
   --timeout TIMEOUT     deployment wait timeout (default 900s)
   --max-failed MAX_FAILED
                         max failed tasks to consider deployment as failed
-                        (default 4)
+                        (default 2)
   --debug               show debug messages
 
   -i IMAGE_NAME, --image-name IMAGE_NAME

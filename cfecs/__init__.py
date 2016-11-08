@@ -48,7 +48,7 @@ def _ecs_service_dsp(service):
 
 WAIT_SLEEP=10
 DEPLOY_TIMEOUT=900
-MAX_FAILED_TASKS=4
+MAX_FAILED_TASKS=2
 
 def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
     """
