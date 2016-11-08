@@ -67,6 +67,7 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
     d_start = datetime.now()
     deploy_timeout = kwargs.get('deploy_timeout') or DEPLOY_TIMEOUT
     max_failed_tasks = kwargs.get('max_failed') or MAX_FAILED_TASKS
+    failed_tasks = []
     log.info("Wait until runningCount will be equal to desiredCount for PRIMARY service task ... ")
     while True:
         time.sleep(WAIT_SLEEP)
@@ -87,10 +88,6 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
                 log.info("Deployment completed Successfully!!!")
                 return {"status": C_SUCCESS, "service": _ecs_service_dsp(service)}
 
-        if (datetime.now() - d_start).total_seconds() > deploy_timeout:
-            log.error("ERROR: Deploy Timeout {}s reached ".format(deploy_timeout))
-            return {"status": C_TIMEOUT, "service": _ecs_service_dsp(service)}
-
         # Check for failed tasks every 30s
         if (datetime.now() - d_start).total_seconds() > 30:
             failed_tasks = get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs,
@@ -99,6 +96,10 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
                 log.error("ERROR:  {} or more ecs tasks failed".format(max_failed_tasks))
                 log.error(pprint.pformat(failed_tasks))
                 return {"status": C_FAIL, "failed_tasks": failed_tasks}
+
+        if (datetime.now() - d_start).total_seconds() > deploy_timeout:
+            log.error("ERROR: Deploy Timeout {}s reached ".format(deploy_timeout))
+            return {"status": C_TIMEOUT, "service": _ecs_service_dsp(service), "failed_tasks": failed_tasks}
 
 def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, **kwargs):
     """
