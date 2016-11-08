@@ -3,13 +3,13 @@
 Deploys to existing Amazon ECS Service
 
 ### Deployment Flow
-- get ECS service by providing aws region, ecs cluster and service names
+- get ECS service by specified aws region, ecs cluster and service names
 - create new revision from current task definition of the service. If --image-name and --image-tag are provided, replace the tag of the image
-- launche update-service with new task definition revision
+- launch update-service with new task definition revision
 - wait for deployment to complete (by default, if running withou --no-wait)
     * deployment is considered as completed successfully if runningCount == desiredCount for PRIMARY deployment - see `aws ecs describe-service`
     * cfecs-update exits with timeout if after --timeout (default = 900s) runningCount != desiredCount script exits with timeout
-    * cfecs-update exits with error if 4 or more ecs tasks were stopped with error for the task definition being deployed
+    * cfecs-update exits with error if --max-failed (default = 4) or more ecs tasks were stopped with error for the task definition being deployed
 
 ### Usage with docker
 
@@ -47,7 +47,7 @@ steps:
 ### cfecs-update -h
 ```
 usage: cfecs-update [-h] [-i IMAGE_NAME] [-t IMAGE_TAG] [--wait | --no-wait]
-                    [--timeout TIMEOUT] [--debug]
+                    [--timeout TIMEOUT] [--max-failed MAX_FAILED] [--debug]
                     region_name cluster_name service_name
 
 Codefresh ECS Deploy
@@ -59,13 +59,16 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -i IMAGE_NAME, --image-name IMAGE_NAME
-                        Image Name in ECS Task Definition to deploy
-  -t IMAGE_TAG, --image-tag IMAGE_TAG
-                        Tag for the in ECS Task Definition to deploy
   --wait                Wait for deployment to complete (default)
   --no-wait             No Wait for deployment to complete
-  --timeout TIMEOUT     deployment wait timeout
+  --timeout TIMEOUT     deployment wait timeout (default 900s)
+  --max-failed MAX_FAILED
+                        max failed tasks to consider deployment as failed
+                        (default 4)
   --debug               show debug messages
 
+  -i IMAGE_NAME, --image-name IMAGE_NAME
+                        Image Name in ECS Task Definition to set new tag
+  -t IMAGE_TAG, --image-tag IMAGE_TAG
+                        Tag for the image
 ```

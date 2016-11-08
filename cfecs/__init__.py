@@ -66,7 +66,7 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
 
     d_start = datetime.now()
     deploy_timeout = kwargs.get('deploy_timeout') or DEPLOY_TIMEOUT
-
+    max_failed_tasks = kwargs.get('max_failed') or MAX_FAILED_TASKS
     log.info("Wait until runningCount will be equal to desiredCount for PRIMARY service task ... ")
     while True:
         time.sleep(WAIT_SLEEP)
@@ -94,9 +94,9 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
         # Check for failed tasks every 30s
         if (datetime.now() - d_start).total_seconds() > 30:
             failed_tasks = get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs,
-                                            max_results=MAX_FAILED_TASKS, created_after=deployment_created_at)
-            if failed_tasks and len(failed_tasks) >= MAX_FAILED_TASKS:
-                log.error("ERROR:  {} or more ecs tasks failed".format(MAX_FAILED_TASKS))
+                                            max_results=max_failed_tasks, created_after=deployment_created_at)
+            if failed_tasks and len(failed_tasks) >= max_failed_tasks:
+                log.error("ERROR:  {} or more ecs tasks failed".format(max_failed_tasks))
                 log.error(pprint.pformat(failed_tasks))
                 return {"status": C_FAIL, "failed_tasks": failed_tasks}
 
@@ -119,8 +119,18 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
     if not ecs:
         ecs = get_ecs(region_name = region_name)
 
+
+    def is_task_failed(task):
+        if task.get('lastStatus') != 'STOPPED':
+            return False
+        if task.get('stoppedReason') and 'Scaling activity initiated by' not in task.get('stoppedReason'):
+            return True
+        failed_containers = [t for t in task.get('containers') if t.get('reason') and 'error' in (t['reason']).lower]
+        if failed_containers:
+            return True
+
     task_list_resp = ecs.list_tasks(cluster=cluster_name, serviceName=service_name, desiredStatus='STOPPED',
-                                    maxResults=min(max_results, 100), nextToken=next_token)
+                                    maxResults=min((max_results or 100), 100), nextToken=next_token)
     next_token = task_list_resp.get('nextToken')
     task_arns_resp = task_list_resp.get("taskArns")
     if not task_arns_resp:
@@ -128,11 +138,11 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
 
     tasks_all_resp = ecs.describe_tasks(cluster=cluster_name, tasks=task_arns_resp)
     tasks_all = tasks_all_resp.get('tasks')
-    tasks = [t for t in tasks_all if t.get('taskDefinitionArn') == task_definition_arn and t.get('createdAt').replace(tzinfo=pytz.utc) > created_after]
-    if not next_token or max_results and len(tasks) >= max_results:
-        return tasks
+    failed_tasks = [t for t in tasks_all if t.get('taskDefinitionArn') == task_definition_arn and t.get('createdAt').replace(tzinfo=pytz.utc) > created_after and is_task_failed(t)]
+    if not next_token or max_results and len(failed_tasks) >= max_results:
+        return failed_tasks
     else:
-        return tasks + get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs, created_after=created_after, max_results=max_results, next_token=next_token)
+        return failed_tasks + get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs, created_after=created_after, max_results=max_results, next_token=next_token)
 
 
 def update_service(cluster_name, service_name, ecs=None, **kwargs):
