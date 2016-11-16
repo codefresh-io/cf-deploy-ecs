@@ -5,34 +5,36 @@ Deployment to Amazon ECS Service
 ### Prerequiests
 - Configured ECS Cluster with at least one running instance
 - Configured ECS Service and task definition for running an image being deployed
+See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/Welcome.html
+
 - AWS Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) with following priviledges:
-    ```json
+```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
         {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Sid": "Stmt1479146904000",
-              "Effect": "Allow",
-              "Action": [
-                "ecs:DescribeServices",
-                "ecs:DescribeTaskDefinition",
-                "ecs:DescribeTasks",
-                "ecs:ListClusters",
-                "ecs:ListServices",
-                "ecs:ListTasks",
-                "ecs:RegisterTaskDefinition",
-                "ecs:UpdateService"
-              ],
-              "Resource": [
-                "*"
-              ]
-            }
+          "Sid": "Stmt1479146904000",
+          "Effect": "Allow",
+          "Action": [
+            "ecs:DescribeServices",
+            "ecs:DescribeTaskDefinition",
+            "ecs:DescribeTasks",
+            "ecs:ListClusters",
+            "ecs:ListServices",
+            "ecs:ListTasks",
+            "ecs:RegisterTaskDefinition",
+            "ecs:UpdateService"
+          ],
+          "Resource": [
+            "*"
           ]
         }
-    ```
+      ]
+    }
+```
 
 ### Deployment with Codefresh
-- Add encrypoted environment variables for aws credentials.
+- Add encrypted environment variables for aws credentials.
      * AWS_ACCESS_KEY_ID
      * AWS_SECRET_ACCESS_KEY
 - Add "deploy to ecs" step to codefresh.yml which runs codefresh/cf-deploy-ecs image with command cfecs-update
