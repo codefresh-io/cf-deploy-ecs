@@ -3,8 +3,8 @@
 Deployment to Amazon ECS Service
 
 ### Prerequiests
-- Configured ECS Cluster with at least one running instance
-- Configured ECS Service and task definition for running an image being deployed
+- Configured ECS Cluster with at least one running instance.
+- Configured ECS Service and task definition with an image being deployed.
   See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/Welcome.html
 
 - AWS Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) with following priviledges:
