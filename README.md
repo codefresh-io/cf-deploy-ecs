@@ -1,6 +1,70 @@
 
 # cf-ecs-deploy
-Deploys to existing Amazon ECS Service
+Deployment to Amazon ECS Service
+
+### Prerequiests
+- Configured ECS Cluster with at least one running instance
+- Configured ECS Service and task definition for running an image being deployed
+- AWS Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) with following priviledges:
+    ```json
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "Stmt1479146904000",
+              "Effect": "Allow",
+              "Action": [
+                "ecs:DescribeServices",
+                "ecs:DescribeTaskDefinition",
+                "ecs:DescribeTasks",
+                "ecs:ListClusters",
+                "ecs:ListServices",
+                "ecs:ListTasks",
+                "ecs:RegisterTaskDefinition",
+                "ecs:UpdateService"
+              ],
+              "Resource": [
+                "*"
+              ]
+            }
+          ]
+        }
+    ```
+
+### Deployment with Codefresh
+- Add encrypoted environment variables for aws credentials.
+     * AWS_ACCESS_KEY_ID
+     * AWS_SECRET_ACCESS_KEY
+- Add "deploy to ecs" step to codefresh.yml which runs codefresh/cf-deploy-ecs image with command cfecs-update
+  Specify the aws region, ecs cluster and service names. See `cfecs-update -h` for parameter references
+
+```yaml
+# codefresh.yml example with deploy to ecs step
+version: '1.0'
+
+steps:
+  build-step:
+    type: build
+    image-name: repo/image:tag
+
+  push to registry:
+    type: push
+    candidate: ${{build-step}}
+    tag: ${{CF_BRANCH}}
+
+  deploy to ecs:
+    image: codefresh/cf-deploy-ecs
+    commands:
+      - cfecs-update <aws-region> <ecs-cluster-name> <ecs-service-name>
+    environment:
+      - AWS_ACCESS_KEY_ID=${{AWS_ACCESS_KEY_ID}}
+      - AWS_SECRET_ACCESS_KEY=${{AWS_SECRET_ACCESS_KEY}}
+
+    when:
+      - name: "Execute for 'master' branch"
+        condition: "'${{CF_BRANCH}}' == 'master'"
+```
+
 
 ### Deployment Flow
 - get ECS service by specified aws region, ecs cluster and service names
@@ -16,33 +80,6 @@ Deploys to existing Amazon ECS Service
 
 ```bash
 docker run --rm -it -e AWS_ACCESS_KEY_ID=**** -e AWS_SECRET_ACCESS_KEY=**** codefresh/cf-ecs-deploy cfecs-update [options] <aws-region> <ecs-cluster-name> <ecs-service-name>
-```
-
-### Usage in codefresh.io yaml
-```yaml
-version: '1.0'
-
-steps:
-  build-step:
-    type: build
-    image-name: kosta709/cf-show-nodejs
-
-  push to registry:
-    type: push
-    candidate: ${{build-step}}
-    tag: ${{CF_BRANCH}}
-
-  deploy to ecs:
-    image: codefresh/cf-deploy-ecs
-    commands:
-      - cfecs-update eu-west-1 test1 service-cf-show-nodejs
-    environment:
-      - AWS_ACCESS_KEY_ID=${{AWS_ACCESS_KEY_ID}}
-      - AWS_SECRET_ACCESS_KEY=${{AWS_SECRET_ACCESS_KEY}}
-
-    when:
-      - name: "Execute for 'master' branch"
-        condition: "'${{CF_BRANCH}}' == 'master'"
 ```
 
 ### cfecs-update -h
