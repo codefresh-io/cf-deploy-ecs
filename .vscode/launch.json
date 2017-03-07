@@ -14,9 +14,7 @@
                 "default",
                 "pdf_service",
                 "--debug",
-                "--kill-tasks",
-                "-i", "438562837906.dkr.ecr.us-west-1.amazonaws.com/broadvoice/utilities.pdf",
-                "-t", "ecs-test"
+                "--kill-tasks"
             ],
             "cwd": "${workspaceRoot}",
             "debugOptions": [
