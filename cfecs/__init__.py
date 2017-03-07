@@ -9,6 +9,7 @@ import pprint
 import copy
 import boto3
 import pytz
+import json
 
 C_SUCCESS = 'SUCCESS'
 C_FAIL = 'FAIL'
@@ -55,8 +56,11 @@ def _ecs_service_dsp(service):
         del _service["events"]
     return _service
 
+def _format_json(obj):
+    return pprint.pformat(obj, indent=4)
 
 WAIT_SLEEP = 10
+SHORT_SLEEP = 3
 DEPLOY_TIMEOUT = 900
 MAX_FAILED_TASKS = 2
 
@@ -108,7 +112,7 @@ def wait_for_deployment(cluster_name, service_name, ecs=None, **kwargs):
                                             created_after=deployment_created_at)
             if failed_tasks and len(failed_tasks) >= max_failed_tasks:
                 log.error("ERROR:  %d or more ecs tasks failed", max_failed_tasks)
-                log.error(pprint.pformat(failed_tasks))
+                log.error(_format_json(failed_tasks))
                 return {"status": C_FAIL, "failed_tasks": failed_tasks}
 
         if (datetime.now() - d_start).total_seconds() > deploy_timeout:
@@ -172,23 +176,29 @@ def get_failed_tasks(cluster_name, service_name, task_definition_arn, ecs=None, 
             cluster_name, service_name, task_definition_arn, ecs, \
             created_after=created_after, max_results=max_results, next_token=next_token)
 
-def kill_running_tasks(cluster_name, service, ecs):
+def _kill_running_tasks(cluster_name, service, ecs):
     service_name = service['serviceName']
     current_task_def_arn = service["taskDefinition"]
     log.info("\n---------------------\nDeRegistering: arn = %s, service = %s\n", \
         current_task_def_arn, service_name)
-    ecs.deregister_task_definition(taskDefinition=current_task_def_arn)
+    dereg_res = ecs.deregister_task_definition(taskDefinition=current_task_def_arn)
+    if not dereg_res or not dereg_res.get('taskDefinition'):
+        raise Exception("ERROR: Invalid response from aws: {}".format(_format_json(dereg_res)))
+    else:
+        log.info("De-register task def OK: %s", _format_json(dereg_res))
 
+    time.sleep(SHORT_SLEEP)
+    log.info("\n........... %s", now())
     get_related_tasks_params = {
         'cluster': cluster_name,
-        'maxResults': 500,
+        'maxResults': 100,
         'serviceName': service_name,
         'desiredStatus': 'RUNNING'
     }
-    log.info("Get Running Services: %s", pprint.pformat(get_related_tasks_params))
+    log.info("Get Running Services: %s", _format_json(get_related_tasks_params))
     response = ecs.list_tasks(**get_related_tasks_params)
     if not response or not response.get('taskArns'):
-        raise Exception("ERROR: Invalid response from aws: {}".format(response))
+        raise Exception("ERROR: Invalid response from aws: {}".format(_format_json(response)))
 
     stop_count = 0
     for task in response.get('taskArns'):
@@ -196,16 +206,18 @@ def kill_running_tasks(cluster_name, service, ecs):
         stop_res = ecs.stop_task( \
             cluster=cluster_name, task=task, reason='cfes-update --kill-running-tasks')
         if not stop_res or not stop_res.get('task'):
-            raise Exception("ERROR: Invalid response from aws: {}".format(stop_res))
+            raise Exception("ERROR: Invalid response from aws: {}".format(_format_json(stop_res)))
         else:
             stop_count += 1
-            log.debug("Stop task response: %s", stop_res)
+            log.debug("Stop task response: %s", _format_json(stop_res))
+        time.sleep(SHORT_SLEEP)
+        log.info("\n........... %s", now())
     log.info("Tasks %d Stopped", stop_count)
 
 def update_service(cluster_name, service_name, ecs=None, **kwargs):
 
-    log.info("\n---------------------\nUpdating Service: cluster = {} , service = {}\n"
-              "{}".format(cluster_name, service_name, pprint.pformat(kwargs, indent=4)))
+    log.info("\n---------------------\nUpdating Service: cluster = %s , service = %s\n%s\n", \
+            cluster_name, service_name, _format_json(kwargs))
     if not ecs:
         ecs = get_ecs(region_name=kwargs.get("region_name"))
 
@@ -247,7 +259,7 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
 
     kill_tasks = kwargs.get('kill_tasks')
     if kill_tasks:
-        kill_running_tasks(cluster_name=cluster_name, service=service, ecs=ecs)
+        _kill_running_tasks(cluster_name=cluster_name, service=service, ecs=ecs)
 
     update_service_params = {
         'cluster': cluster_name,
@@ -256,7 +268,7 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
         'taskDefinition': new_task_def_arn,
         'deploymentConfiguration': service['deploymentConfiguration']
     }
-    log.info("Updating Service: %s", pprint.pformat(update_service_params))
+    log.info("Updating Service: %s", _format_json(update_service_params))
     response = ecs.update_service(**update_service_params)
     if not response or not response.get('service') or \
         not response.get('ResponseMetadata') or \

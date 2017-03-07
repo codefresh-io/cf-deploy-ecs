@@ -33,8 +33,14 @@ if __name__ == '__main__':
     ARGS_WAIT_GROUP.add_argument('--no-wait', action='store_false', dest='wait', \
         help='No Wait for deployment to complete')
 
-    PARSER.add_argument('--kill-running-tasks', action='store', dest='kill_tasks', default=False, \
+    ARGS_KILL_GROUP = PARSER.add_mutually_exclusive_group()
+    ARGS_KILL_GROUP.add_argument('--no-kill-tasks', action='store_false', dest='kill_tasks', \
+        default=False, \
+        help='Leave current running taks alone, they will need to be manually killed')
+    ARGS_KILL_GROUP.add_argument('--kill-tasks', action='store_true', dest='kill_tasks', \
+        default=True, \
         help='De-register current task definition & stop all running tasks related to service')
+
     PARSER.add_argument('--timeout', action='store', dest='timeout', default=cfecs.DEPLOY_TIMEOUT, \
         help='deployment wait timeout (default 900s)')
     PARSER.add_argument( \
@@ -43,14 +49,14 @@ if __name__ == '__main__':
     PARSER.add_argument('--debug', action='store_true', dest='debug', \
         help='show debug messages')
 
-
     ARGS = PARSER.parse_args()
     try:
         if ARGS.debug:
             cfecs.init_log(logging.DEBUG)
         RESPONSE = cfecs.update_service(ARGS.cluster_name, ARGS.service_name, \
             region_name=ARGS.region_name, wait=ARGS.wait, deploy_timeout=ARGS.timeout, \
-            max_failed=ARGS.max_failed, image_name=ARGS.image_name, image_tag=ARGS.image_tag)
+            max_failed=ARGS.max_failed, image_name=ARGS.image_name, image_tag=ARGS.image_tag, \
+            kill_tasks=ARGS.kill_tasks)
 
         if not RESPONSE.get("status") or RESPONSE["status"] in (cfecs.C_FAIL, cfecs.C_TIMEOUT):
             cfecs.log.error("ERROR: %s", pprint.pformat(RESPONSE))
