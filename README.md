@@ -1,6 +1,6 @@
 
 # cf-ecs-deploy
-Deployment to Amazon ECS Service
+Deployment Sidecar Image for Amazon ECS Service
 
 ### Prerequiests
 - Configured ECS Cluster with at least one running instance.
