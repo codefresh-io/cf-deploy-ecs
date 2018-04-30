@@ -163,13 +163,15 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
 
     task_definition_desc = ecs.describe_task_definition(taskDefinition = current_task_def_arn)
     task_definition = task_definition_desc['taskDefinition']
-    keys_to_remove = ["status", "taskDefinitionArn", "requiresAttributes", "revision"]
+
+    keys_to_remove = ["status", "taskDefinitionArn", "requiresAttributes", "revision", "compatibilities"]
     for k in keys_to_remove:
         task_definition.pop(k, None)
 
     image_name = kwargs.get('image_name')
     new_image_tag = kwargs.get('image_tag')
     new_image_name_tag = '{}:{}'.format(image_name, new_image_tag)
+    
     if image_name and new_image_tag:
         _found = False
         for c in task_definition['containerDefinitions']:
@@ -192,8 +194,9 @@ def update_service(cluster_name, service_name, ecs=None, **kwargs):
         'service': service_name,
         'desiredCount': service['desiredCount'],
         'taskDefinition': new_task_def_arn,
-        'deploymentConfiguration': service['deploymentConfiguration']
+        'deploymentConfiguration': service['deploymentConfiguration'],
     }
+
     log.info("Updating Service: {}".format(pprint.pformat(update_service_params)))
     response = ecs.update_service(**update_service_params)
     if not response or not response.get('service') or not response.get('ResponseMetadata') or response.get('ResponseMetadata').get('HTTPStatusCode') > 299:
