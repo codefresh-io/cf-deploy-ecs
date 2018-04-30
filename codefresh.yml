@@ -1,11 +1,9 @@
 version: '1.0'
-
 steps:
-  build-step:
+  BuildingDockerImage:
+    title: Building Docker Image
     type: build
-    image-name: codefresh/cf-deploy-ecs
-
-  push to registry:
-    type: push
-    candidate: ${{build-step}}
-    tag: ${{CF_BRANCH}}
+    image_name: timeideros/cf-deploy-ecs
+    working_directory: ./
+    dockerfile: Dockerfile
+    tag: '${{CF_BUILD_TIMESTAMP}}'
