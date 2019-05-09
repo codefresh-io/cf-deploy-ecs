@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [{
+            "name": "cfecs-update",
+            "type": "python",
+            "pythonPath": "${config.python.pythonPath}",
+            "request": "launch",
+            "stopOnEntry": true,
+            "console": "none",
+            //"program": "${file}",
+            "program": "${workspaceRoot}/cfecs-update",
+            "args": [
+                "us-west-1",
+                "default",
+                "pdf_service",
+                "--debug",
+                "--kill-tasks"
+            ],
+            "cwd": "${workspaceRoot}",
+            "debugOptions": [
+                "WaitOnAbnormalExit",
+                "WaitOnNormalExit",
+                "RedirectOutput"
+            ],
+            "env": {
+                //"name": "value"
+            }
+        },
+        {
+            "name": "Current File",
+            "type": "python",
+            "pythonPath": "${config.python.pythonPath}",
+            "request": "launch",
+            "stopOnEntry": true,
+            "console": "none",
+            "program": "${file}",
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "debugOptions": [
+                "WaitOnAbnormalExit",
+                "WaitOnNormalExit",
+                "RedirectOutput"
+            ],
+            "env": {
+                //"name": "value"
+            }
+        }
+    ]
+}
